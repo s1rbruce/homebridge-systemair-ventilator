@@ -34,7 +34,7 @@ Replace x.x.x.x with the actual IP address of your Systemair SAVEConnect device.
    Restart Homebridge for the changes to take effect:
 
 ```bash
-npm install -g homebridge-systemair-ventilator-bruce
+   sudo systemctl restart homebridge 
 ```
 
 # Features:
