@@ -25,7 +25,7 @@ class SystemairVentilator {
     // Fan service
     this.fanService = new Service.Fanv2(this.config.name + " Fan");
 
-    // Refresh service
+    // Refresh service (momentary button)
     this.refreshService = new Service.Switch(this.config.name + " Refresh");
 
     // Timer service (using BatteryService instead of LightSensor)
@@ -46,7 +46,7 @@ class SystemairVentilator {
       .onSet(this.setRotationSpeed.bind(this))
       .onGet(this.getRotationSpeed.bind(this));
 
-    // Refresh characteristic
+    // Refresh characteristic (momentary)
     this.refreshService
       .getCharacteristic(Characteristic.On)
       .onSet(this.setRefresh.bind(this));
@@ -72,7 +72,12 @@ class SystemairVentilator {
     }
   }
 
+  // Active (ON/OFF)
   async setActive(value) {
+    // NOTE: In this implementation, Active writes 1/0 to 1130 as before.
+    // RotationSpeed writes 2/3/4 (and 0) to the same register. This matches
+    // the original behavior; if you later want "ON" to restore last speed,
+    // we can adjust it.
     const url = `http://${this.config.ip}/mwrite?{"1130":${value ? '1' : '0'}}`;
     this.log(`SetActive: Sending request to ${url}`);
     await this.retryRequest(url);
@@ -88,16 +93,20 @@ class SystemairVentilator {
     return isActive ? 1 : 0;
   }
 
+  // RotationSpeed mapping:
+  // 2 -> 25%
+  // 3 -> 45%
+  // 4 -> 70%
   async setRotationSpeed(value) {
     let speed;
     if (value === 0) {
       speed = 0;
-    } else if (value <= 16) {
-      speed = 2;
-    } else if (value <= 50) {
-      speed = 3;
+    } else if (value <= 34) {
+      speed = 2; // 25%
+    } else if (value <= 57) {
+      speed = 3; // 45%
     } else {
-      speed = 4;
+      speed = 4; // 70%
     }
 
     const url = `http://${this.config.ip}/mwrite?{"1130":${speed}}`;
@@ -111,23 +120,28 @@ class SystemairVentilator {
     this.log(`GetRotationSpeed: Sending request to ${url}`);
     const response = await this.retryRequest(url);
     const speed = response.data["1130"];
-    let percentage = speed === 2 ? 16 : speed === 3 ? 50 : speed === 4 ? 83 : 0;
+    let percentage = speed === 2 ? 25 : speed === 3 ? 45 : speed === 4 ? 70 : 0;
     this.log(`GetRotationSpeed: Current speed is ${speed} (value: ${percentage}%)`);
     return percentage;
   }
 
+  // Refresh / Boost (momentary):
+  // - Do NOT write temperature (no 2000:180)
+  // - Do NOT force fan level (no 1130:2)
+  // - Only trigger refresh mode
   async setRefresh(value) {
-    if (value) {
-      const writeUrl = `http://${this.config.ip}/mwrite?{"1130":2,"1161":4,"2000":180,"2504":0,"16100":0}`;
-      this.log(`Refresh: Sending request to ${writeUrl}`);
-      await this.retryRequest(writeUrl);
-      this.log(`Refresh: Successfully started refresh mode.`);
-      setTimeout(() => {
-        this.refreshService
-          .getCharacteristic(Characteristic.On)
-          .updateValue(false);
-      }, 1000);
-    }
+    if (!value) return;
+
+    const writeUrl = `http://${this.config.ip}/mwrite?{"1161":4}`;
+    this.log(`Refresh: Sending request to ${writeUrl}`);
+    await this.retryRequest(writeUrl);
+    this.log(`Refresh: Successfully started refresh mode.`);
+
+    setTimeout(() => {
+      this.refreshService
+        .getCharacteristic(Characteristic.On)
+        .updateValue(false);
+    }, 1000);
   }
 
   async getTimer() {
@@ -156,3 +170,4 @@ class SystemairVentilator {
     return [this.fanService, this.refreshService, this.timerService];
   }
 }
+
