@@ -5,9 +5,13 @@ let Service, Characteristic;
 module.exports = (homebridge) => {
   Service = homebridge.hap.Service;
   Characteristic = homebridge.hap.Characteristic;
+
+  // IMPORTANT:
+  // - First arg: plugin identifier (should match your npm package name)
+  // - Second arg: accessory name used in config.json ("accessory": "...")
   homebridge.registerAccessory(
-    'homebridge-systemair-ventilator',
-    'SystemairVentilator',
+    'homebridge-systemair-ventilator-bruce',
+    'SystemairVentilatorBruce',
     SystemairVentilator
   );
 };
@@ -74,10 +78,6 @@ class SystemairVentilator {
 
   // Active (ON/OFF)
   async setActive(value) {
-    // NOTE: In this implementation, Active writes 1/0 to 1130 as before.
-    // RotationSpeed writes 2/3/4 (and 0) to the same register. This matches
-    // the original behavior; if you later want "ON" to restore last speed,
-    // we can adjust it.
     const url = `http://${this.config.ip}/mwrite?{"1130":${value ? '1' : '0'}}`;
     this.log(`SetActive: Sending request to ${url}`);
     await this.retryRequest(url);
@@ -126,8 +126,8 @@ class SystemairVentilator {
   }
 
   // Refresh / Boost (momentary):
-  // - Do NOT write temperature (no 2000:180)
-  // - Do NOT force fan level (no 1130:2)
+  // - Do NOT write temperature
+  // - Do NOT force fan level
   // - Only trigger refresh mode
   async setRefresh(value) {
     if (!value) return;
@@ -149,20 +149,16 @@ class SystemairVentilator {
     this.log(`Timer: Fetching timer value from ${url}`);
     try {
       const response = await this.retryRequest(url);
-      let timerValue = response.data["1110"]; // Extract timer value
+      let timerValue = response.data["1110"];
 
-      // Ensure timer value is valid for HomeKit (0 - 100% battery level range)
-      if (timerValue < 0) {
-        timerValue = 0;
-      } else if (timerValue > 100) {
-        timerValue = 100; // Max HomeKit battery level
-      }
+      if (timerValue < 0) timerValue = 0;
+      if (timerValue > 100) timerValue = 100;
 
       this.log(`Timer: Current remaining time is ${timerValue} minutes.`);
-      return timerValue; // Return valid percentage
+      return timerValue;
     } catch (error) {
       this.log(`Timer: Error - ${error.message}`);
-      return 0; // Default to 0% if an error occurs
+      return 0;
     }
   }
 
@@ -170,4 +166,3 @@ class SystemairVentilator {
     return [this.fanService, this.refreshService, this.timerService];
   }
 }
-
