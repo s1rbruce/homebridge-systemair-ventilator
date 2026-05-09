@@ -1,6 +1,6 @@
 {
   "name": "homebridge-systemair-ventilator-bruce",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Homebridge plugin for controlling Systemair SAVE ventilators with improved Refresh behavior.",
   "main": "index.js",
   "author": "Bruce",
